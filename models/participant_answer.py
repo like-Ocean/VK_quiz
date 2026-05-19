@@ -1,5 +1,7 @@
+import uuid
 from datetime import datetime
 from sqlalchemy import ForeignKey, func
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.database import Base
 
@@ -7,13 +9,17 @@ from core.database import Base
 class ParticipantAnswer(Base):
     __tablename__ = "participant_answers"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"), index=True)
-    participant_id: Mapped[int] = mapped_column(
-        ForeignKey("room_participants.id", ondelete="CASCADE"), index=True
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    question_id: Mapped[int] = mapped_column(
-        ForeignKey("questions.id", ondelete="CASCADE"), index=True
+    room_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("rooms.id", ondelete="CASCADE"), index=True
+    )
+    participant_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("room_participants.id", ondelete="CASCADE"), index=True
+    )
+    question_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("questions.id", ondelete="CASCADE"), index=True
     )
     selected_option_ids: Mapped[str]
     is_correct: Mapped[bool] = mapped_column(default=False)

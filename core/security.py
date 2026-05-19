@@ -19,14 +19,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     hashed_byte = hashed_password.encode('utf-8')
     return bcrypt.checkpw(password_byte, hashed_byte)
 
-# возможно удалить роль 
-def create_access_token(user_id: str) -> str:
+
+def create_access_token(user_id: uuid.UUID) -> str:
     now = datetime.now(timezone.utc)
     expire = now + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
     payload = {
-        "sub": user_id,
+        "sub": str(user_id),
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
         "jti": str(uuid.uuid4()),
@@ -36,7 +36,7 @@ def create_access_token(user_id: str) -> str:
     return jwt.encode(payload, secret, algorithm=algorithm)
 
 
-def decode_access_token(token: str) -> str:
+def decode_access_token(token: str) -> uuid.UUID:
     secret = settings.SECRET_KEY
     algorithm = settings.ALGORITHM
     payload = jwt.decode(token, secret, algorithms=[algorithm])
@@ -45,7 +45,7 @@ def decode_access_token(token: str) -> str:
     if user_id is None:
         raise JWTError("Missing subject")
 
-    return int(user_id)
+    return uuid.UUID(user_id)
 
 
 def generate_refresh_token() -> str:

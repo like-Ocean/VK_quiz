@@ -1,5 +1,7 @@
 import enum
+import uuid
 from sqlalchemy import ForeignKey, Text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.database import Base
 
@@ -17,8 +19,12 @@ class AnswerType(str, enum.Enum):
 class Question(Base):
     __tablename__ = "questions"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id", ondelete="CASCADE"), index=True)
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    quiz_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("quizzes.id", ondelete="CASCADE"), index=True
+    )
     order: Mapped[int]
     text: Mapped[str] = mapped_column(Text)
     image_url: Mapped[str | None]

@@ -32,7 +32,7 @@ async def create_admin(db: AsyncSession) -> None:
     admin = User(
         email=settings.ADMIN_EMAIL,
         username="admin",
-        hashed_password=hash_password(settings.ADMIN_PASSWORD),
+        password=hash_password(settings.ADMIN_PASSWORD),
         is_admin=True,
     )
     db.add(admin)

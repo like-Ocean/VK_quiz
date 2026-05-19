@@ -1,5 +1,7 @@
+import uuid
 from datetime import datetime
 from sqlalchemy import ForeignKey, String, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.database import Base
 
@@ -10,10 +12,14 @@ class RoomParticipant(Base):
         UniqueConstraint("room_id", "user_id", name="uq_room_user"),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"), index=True)
-    user_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    room_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("rooms.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     guest_name: Mapped[str | None] = mapped_column(String(100))
     display_name: Mapped[str] = mapped_column(String(100))  # username или guest_name

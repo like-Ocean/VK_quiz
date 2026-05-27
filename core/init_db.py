@@ -4,6 +4,7 @@ from core.security import hash_password
 from core.config import settings
 from models.user import User
 from models.category import Category
+from models.kick_reason import KickReason
 
 
 CATEGORIES = [
@@ -17,6 +18,12 @@ CATEGORIES = [
     "Технологии",
     "Природа",
     "Литература"
+]
+
+KICK_REASONS = [
+    "Оскорбительный никнейм",
+    "Нарушение правил",
+    "Другое",
 ]
 
 
@@ -52,7 +59,20 @@ async def create_categories(db: AsyncSession) -> None:
             print(f"[init_db] Category added: {name}")
 
 
+async def create_kick_reasons(db: AsyncSession) -> None:
+    for label in KICK_REASONS:
+        result = await db.execute(
+            select(KickReason).where(KickReason.label == label)
+        )
+        exists = result.scalar_one_or_none()
+
+        if not exists:
+            db.add(KickReason(label=label))
+            print(f"[init_db] Kick reason added: {label}")
+
+
 async def init_db(db: AsyncSession) -> None:
     await create_admin(db)
     await create_categories(db)
+    await create_kick_reasons(db)
     await db.commit()

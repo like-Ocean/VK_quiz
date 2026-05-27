@@ -3,6 +3,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 from core.security import hash_password, verify_password
+from models.quiz import Quiz
+from models.room import Room
+from models.room_participant import RoomParticipant
 from models.user import User
 
 
@@ -80,3 +83,43 @@ async def update_user_password(db: AsyncSession, user: User, new_password: str) 
 	await db.refresh(user)
 	
 	return user
+
+
+async def list_user_quizzes(db: AsyncSession, user: User) -> list[Quiz]:
+	result = await db.execute(select(Quiz).where(Quiz.owner_id == user.id))
+	return list(result.scalars().all())
+
+
+async def get_participation_history(db: AsyncSession, user: User) -> list[dict]:
+	result = await db.execute(
+		select(RoomParticipant, Room, Quiz)
+		.join(Room, RoomParticipant.room_id == Room.id)
+		.join(Quiz, Room.quiz_id == Quiz.id)
+		.where(RoomParticipant.user_id == user.id)
+	)
+	rows = result.all()
+
+	history: list[dict] = []
+	for participant, room, quiz in rows:
+		participants_result = await db.execute(
+			select(RoomParticipant)
+			.where(RoomParticipant.room_id == room.id)
+			.order_by(RoomParticipant.score.desc())
+		)
+		participants = list(participants_result.scalars().all())
+		position = next(
+			(idx + 1 for idx, item in enumerate(participants) if item.id == participant.id),
+			None,
+		)
+
+		history.append(
+			{
+				"room_id": room.id,
+				"quiz_title": quiz.title,
+				"score": participant.score,
+				"finished_at": room.finished_at,
+				"leaderboard_position": position,
+			}
+		)
+
+	return history

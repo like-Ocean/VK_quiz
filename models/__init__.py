@@ -7,3 +7,5 @@ from .answer_option import AnswerOption
 from .room import Room
 from .room_participant import RoomParticipant
 from .participant_answer import ParticipantAnswer
+from .kick_reason import KickReason
+from .room_kick import RoomKick

@@ -5,8 +5,10 @@ from core.dependencies import get_current_user
 from models.user import User
 from schemas.user import UserResponse, UserUpdateRequest, ChangePasswordRequest
 from schemas.auth import MessageResponse
+from schemas.quiz import QuizResponse
+from schemas.room import ParticipationHistoryResponse
 from services.user_service import (
-    update_user_profile, change_user_password
+    update_user_profile, change_user_password, list_user_quizzes, get_participation_history
 )
 
 user_router = APIRouter(prefix="/users", tags=["users"])
@@ -25,7 +27,7 @@ async def update_me(
     updated = await update_user_profile(
         db, current_user,
         email=payload.email,
-        username=payload.username,
+        username=payload.username
     )
     return updated
 
@@ -34,7 +36,20 @@ async def update_me(
 async def change_password(
     payload: ChangePasswordRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user)
 ) -> MessageResponse:
     await change_user_password(db, current_user, payload.old_password, payload.new_password)
     return MessageResponse(message="Password updated")
+
+
+@user_router.get("/me/quizzes", response_model=list[QuizResponse])
+async def get_my_quizzes(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> list[QuizResponse]:
+    return await list_user_quizzes(db, current_user)
+
+
+@user_router.get("/me/history", response_model=list[ParticipationHistoryResponse])
+async def get_my_history(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[ParticipationHistoryResponse]:
+    return await get_participation_history(db, current_user)

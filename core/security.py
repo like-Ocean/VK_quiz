@@ -20,11 +20,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(password_byte, hashed_byte)
 
 
-def create_access_token(user_id: uuid.UUID) -> str:
+def create_access_token(user_id: uuid.UUID, expires_minutes: int | None = None) -> str:
     now = datetime.now(timezone.utc)
-    expire = now + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
+    ttl_minutes = expires_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    expire = now + timedelta(minutes=ttl_minutes)
     payload = {
         "sub": str(user_id),
         "iat": int(now.timestamp()),

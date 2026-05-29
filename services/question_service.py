@@ -2,6 +2,7 @@ import uuid
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from models.answer_option import AnswerOption
 from models.question import Question
 from models.user import User
@@ -9,7 +10,9 @@ from schemas.question import QuestionCreate, QuestionUpdate
 from helpers.quiz import _get_quiz_for_edit
 
 
-async def create_question(db: AsyncSession, user: User, quiz_id: uuid.UUID, payload: QuestionCreate) -> Question:
+async def create_question(
+    db: AsyncSession, user: User, quiz_id: uuid.UUID, payload: QuestionCreate
+) -> Question:
     await _get_quiz_for_edit(db, user, quiz_id)
 
     question = Question(
@@ -25,18 +28,30 @@ async def create_question(db: AsyncSession, user: User, quiz_id: uuid.UUID, payl
     await db.flush()
 
     for option in payload.answer_options:
-        db.add(
-            AnswerOption(
-                question_id=question.id,
-                text=option.text,
-                is_correct=option.is_correct,
-            )
-        )
+        db.add(AnswerOption(
+            question_id=question.id,
+            text=option.text,
+            is_correct=option.is_correct,
+        ))
 
     await db.commit()
-    await db.refresh(question)
-    
-    return question
+
+    result = await db.execute(
+        select(Question)
+        .where(Question.id == question.id)
+        .options(selectinload(Question.answer_options))
+    )
+    return result.scalar_one()
+
+
+async def get_questions(db: AsyncSession, quiz_id: uuid.UUID) -> list[Question]:
+    result = await db.execute(
+        select(Question)
+        .where(Question.quiz_id == quiz_id)
+        .options(selectinload(Question.answer_options))
+        .order_by(Question.order)
+    )
+    return list(result.scalars().all())
 
 
 async def update_question(
@@ -86,9 +101,13 @@ async def update_question(
             )
 
     await db.commit()
-    await db.refresh(question)
 
-    return question
+    result = await db.execute(
+        select(Question)
+        .where(Question.id == question.id)
+        .options(selectinload(Question.answer_options))
+    )
+    return result.scalar_one()
 
 
 async def delete_question(db: AsyncSession, user: User, quiz_id: uuid.UUID, question_id: uuid.UUID):

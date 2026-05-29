@@ -23,6 +23,7 @@ class QuizResponse(BaseModel):
     id: uuid.UUID
     owner_id: uuid.UUID
     category_id: uuid.UUID | None
+    category_name: str | None
     title: str
     description: str | None
     time_per_question: int
@@ -32,3 +33,11 @@ class QuizResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class QuizListResponse(BaseModel):
+    items: list[QuizResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

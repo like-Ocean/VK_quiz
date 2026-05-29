@@ -33,3 +33,7 @@ class Quiz(Base):
         order_by="Question.order",
     )
     rooms: Mapped[list["Room"]] = relationship(back_populates="quiz")
+
+    @property
+    def category_name(self) -> str | None:
+        return self.category.name if self.category else None

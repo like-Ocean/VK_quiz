@@ -11,9 +11,7 @@ from schemas.question import (
     QuestionResponse, QuestionReorderRequest,
 )
 from schemas.room import ImageUploadResponse
-from services.question_service import (
-    create_question, update_question, delete_question, reorder_questions
-)
+from services import question_service
 import os
 import uuid as uuid_lib
 
@@ -30,7 +28,15 @@ async def add_question(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> QuestionResponse:
-    return await create_question(db, current_user, quiz_id, payload)
+    return await question_service.create_question(db, current_user, quiz_id, payload)
+
+
+@question_router.get("/quizzes/{quiz_id}/questions", response_model=list[QuestionResponse])
+async def get_questions_handler(
+    quiz_id: uuid.UUID, db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> list[QuestionResponse]:
+    return await question_service.get_questions(db, quiz_id)
 
 
 @question_router.patch("/quizzes/{quiz_id}/questions/{question_id}", response_model=QuestionResponse)
@@ -39,7 +45,7 @@ async def update_question_handler(
     payload: QuestionUpdate, db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> QuestionResponse:
-    return await update_question(db, current_user, quiz_id, question_id, payload)
+    return await question_service.update_question(db, current_user, quiz_id, question_id, payload)
 
 
 @question_router.delete("/quizzes/{quiz_id}/questions/{question_id}", response_model=MessageResponse)
@@ -48,7 +54,7 @@ async def delete_question_handler(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> MessageResponse:
-    await delete_question(db, current_user, quiz_id, question_id)
+    await question_service.delete_question(db, current_user, quiz_id, question_id)
 
     return MessageResponse(message="Question deleted")
 
@@ -59,7 +65,7 @@ async def reorder_questions_handler(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> MessageResponse:
-    await reorder_questions(db, current_user, quiz_id, payload.question_ids)
+    await question_service.reorder_questions(db, current_user, quiz_id, payload.question_ids)
     
     return MessageResponse(message="Questions reordered")
 

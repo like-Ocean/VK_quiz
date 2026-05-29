@@ -54,6 +54,7 @@ async def issue_tokens(db: AsyncSession, user_id: uuid.UUID):
 	expires_at = datetime.now(timezone.utc) + timedelta(
 		days=settings.REFRESH_TOKEN_EXPIRE_DAYS
 	)
+	expires_at = expires_at.replace(tzinfo=None)
 
 	db.add(
 		RefreshToken(
@@ -95,7 +96,7 @@ async def refresh_tokens(db: AsyncSession, refresh_token: str):
 			detail="Invalid refresh token",
 		)
 
-	if refresh_record.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+	if refresh_record.expires_at < datetime.utcnow():
 		await revoke_refresh_token(db, refresh_record)
 		raise HTTPException(
 			status_code=status.HTTP_401_UNAUTHORIZED,

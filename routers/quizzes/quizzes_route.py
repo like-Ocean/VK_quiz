@@ -1,11 +1,11 @@
 import uuid
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_db
 from core.dependencies import get_current_user_optional, get_current_user
 from models.user import User
 from schemas.auth import MessageResponse
-from schemas.quiz import QuizCreate, QuizUpdate, QuizResponse
+from schemas.quiz import QuizCreate, QuizListResponse, QuizUpdate, QuizResponse
 from services.quiz_service import (
     list_public_quizzes, create_quiz,
     get_quiz_for_view, update_quiz, delete_quiz
@@ -14,9 +14,16 @@ from services.quiz_service import (
 quiz_router = APIRouter(prefix="/quizzes", tags=["quizzes"])
 
 
-@quiz_router.get("", response_model=list[QuizResponse])
-async def get_quizzes(db: AsyncSession = Depends(get_db)) -> list[QuizResponse]:
-    return await list_public_quizzes(db)
+@quiz_router.get("", response_model=QuizListResponse)
+async def get_quizzes(
+    db: AsyncSession = Depends(get_db),
+    search: str | None = Query(None),
+    category_id: uuid.UUID | None = Query(None),
+    owner_id: uuid.UUID | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+) -> QuizListResponse:
+    return await list_public_quizzes(db, search, category_id, owner_id, page, page_size)
 
 
 @quiz_router.post("", response_model=QuizResponse, status_code=status.HTTP_201_CREATED)

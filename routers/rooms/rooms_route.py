@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_db
 from core.dependencies import get_current_user, get_current_user_optional
@@ -11,7 +11,7 @@ from schemas.room import (
     KickRequest, LeaderboardEntry
 )
 from services.room_service import (
-    create_room, join_room,
+    create_room, get_room_by_join_code, join_room,
     list_participants, kick_participant,
     get_room_results, get_room
 )
@@ -33,11 +33,24 @@ async def join_room_handler(
     current_user: User | None = Depends(get_current_user_optional),
 ) -> RoomJoinResponse:
     room_id, participant_id, guest_token = await join_room(
-        db, payload.room_id, current_user, payload.guest_name
+        db, payload.join_code,
+        current_user, payload.guest_name
     )
+    room = await get_room(db, room_id)
     return RoomJoinResponse(
-        room_id=room_id, participant_id=participant_id, guest_token=guest_token
+        room_id=room_id,
+        participant_id=participant_id,
+        guest_token=guest_token,
+        join_code=room.join_code,
     )
+
+
+@room_router.get("/by-code/{join_code}", response_model=RoomResponse)
+async def get_room_by_join_code_endpoint(join_code: str, db: AsyncSession = Depends(get_db)) -> RoomResponse:
+    room = await get_room_by_join_code(db, join_code)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return room
 
 
 @room_router.get("/{room_id}", response_model=RoomResponse)
@@ -53,14 +66,12 @@ async def get_participants(room_id: uuid.UUID, db: AsyncSession = Depends(get_db
 @room_router.post("/{room_id}/kick", response_model=MessageResponse)
 async def kick_participant_handler(
     room_id: uuid.UUID, payload: KickRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-) -> MessageResponse:
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)) -> MessageResponse:
     await kick_participant(
         db, room_id, current_user,
         payload.participant_id,
         payload.reason_id,
-        payload.comment
+        payload.comment,
     )
     return MessageResponse(message="Participant kicked")
 

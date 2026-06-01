@@ -4,6 +4,7 @@ import uuid
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from core.security import create_access_token
 from models.kick_reason import KickReason
 from models.participant_answer import ParticipantAnswer
@@ -49,18 +50,29 @@ async def create_room(db: AsyncSession, user: User, quiz_id: uuid.UUID) -> Room:
 
 
 async def join_room(
-    db: AsyncSession, room_id: uuid.UUID,
+    db: AsyncSession, join_code: str,
     user: User | None, guest_name: str | None
 ) -> tuple[uuid.UUID, uuid.UUID, str | None]:
-    room = await _get_room(db, room_id)
+    room = await get_room_by_join_code(db, join_code)
+    if not room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Room not found"
+        )
 
     if user and user.is_admin:
         pass
     elif room.status != RoomStatus.waiting:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quiz already started")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Quiz already started"
+        )
 
     if not user and not guest_name:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Guest name required")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Guest name required"
+        )
 
     if user:
         result = await db.execute(
@@ -154,7 +166,10 @@ async def get_room_by_join_code(db: AsyncSession, join_code: str) -> Room | None
 
 async def get_question_by_index(db: AsyncSession, quiz_id: uuid.UUID, index: int) -> Question | None:
     result = await db.execute(
-        select(Question).where(Question.quiz_id == quiz_id).order_by(Question.order)
+        select(Question)
+        .options(selectinload(Question.answer_options))
+        .where(Question.quiz_id == quiz_id)
+        .order_by(Question.order)
     )
     questions = list(result.scalars().all())
     if index < 0 or index >= len(questions):

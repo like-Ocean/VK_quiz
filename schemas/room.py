@@ -24,7 +24,7 @@ class RoomResponse(BaseModel):
 
 
 class RoomJoin(BaseModel):
-    room_id: uuid.UUID
+    join_code: str = Field(..., min_length=6, max_length=8)
     guest_name: str | None = Field(None, min_length=1, max_length=100)
 
 
@@ -32,6 +32,7 @@ class RoomJoinResponse(BaseModel):
     room_id: uuid.UUID
     participant_id: uuid.UUID
     guest_token: str | None = None
+    join_code: str
 
 
 class ParticipantResponse(BaseModel):

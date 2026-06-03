@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from datetime import datetime, timezone
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -89,7 +90,6 @@ async def question_end_payload(db: AsyncSession, room: Room, question: Question)
     )
     question = result.scalar_one()
     correct_ids = [str(opt.id) for opt in question.answer_options if opt.is_correct]
-
     leaderboard = await get_leaderboard(db, room)
 
     return {
@@ -127,78 +127,117 @@ async def schedule_question_end(room: Room, question: Question, seconds: int) ->
     quiz_id = room.quiz_id
     question_id = question.id
 
-    await asyncio.sleep(seconds)
+    print(f"[TIMER] Started for room {room_id}, question {question_id}, sleeping {seconds}s")
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Question).options(selectinload(Question.answer_options))
-            .where(Question.id == question_id)
-        )
-        fresh_question = result.scalar_one()
+    try:
+        await asyncio.sleep(seconds)
+    except asyncio.CancelledError:
+        print(f"[TIMER] Cancelled during sleep for room {room_id}")
+        return
 
-        result = await db.execute(select(Room).where(Room.id == room_id))
-        fresh_room = result.scalar_one()
+    print(f"[TIMER] Woke up for room {room_id}, running finish_question")
 
-        await finish_question(db, fresh_room, fresh_question)
+    # Шаг 1 — отправляем question_end и leaderboard_update
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Question).options(selectinload(Question.answer_options))
+                .where(Question.id == question_id)
+            )
+            fresh_question = result.scalar_one()
 
-    await asyncio.sleep(3)
+            result = await db.execute(select(Room).where(Room.id == room_id))
+            fresh_room = result.scalar_one()
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Room).where(Room.id == room_id))
-        fresh_room = result.scalar_one()
+            print(f"[TIMER] Sending question_end for room {room_id}")
+            await finish_question(db, fresh_room, fresh_question)
+            print(f"[TIMER] question_end sent for room {room_id}")
+    except Exception as e:
+        print(f"[TIMER] ERROR in finish_question for room {room_id}: {e}")
+        return
 
-        new_index = fresh_room.current_question_index + 1
+    print(f"[TIMER] Sleeping 3s before next question for room {room_id}")
+    try:
+        await asyncio.sleep(3)
+    except asyncio.CancelledError:
+        print(f"[TIMER] Cancelled during 3s pause for room {room_id}")
+        return
 
-        await db.execute(
-            update(Room)
-            .where(Room.id == room_id)
-            .values(current_question_index=new_index)
-        )
-        await db.commit()
+    print(f"[TIMER] Advancing question index for room {room_id}")
 
-        next_question = await get_question_by_index(db, quiz_id, new_index)
+    # Шаг 2 — увеличиваем индекс и решаем: следующий вопрос или финал
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Room).where(Room.id == room_id))
+            fresh_room = result.scalar_one()
+            print(f"[TIMER] Current index: {fresh_room.current_question_index}, status: {fresh_room.status}")
 
-        if not next_question:
-            from datetime import datetime, timezone
+            new_index = fresh_room.current_question_index + 1
+
             await db.execute(
                 update(Room)
                 .where(Room.id == room_id)
-                .values(
-                    status=RoomStatus.finished,
-                    finished_at=datetime.now(timezone.utc),
-                )
+                .values(current_question_index=new_index)
             )
             await db.commit()
+            print(f"[TIMER] Index updated to {new_index} for room {room_id}")
 
-            result = await db.execute(select(Room).where(Room.id == room_id))
-            fresh_room_for_lb = result.scalar_one()
+            next_question = await get_question_by_index(db, quiz_id, new_index)
+            print(f"[TIMER] Next question at index {new_index}: {'found' if next_question else 'NOT FOUND — finishing'}")
 
-            leaderboard = await get_leaderboard(db, fresh_room_for_lb)
+            if not next_question:
+                # Финал — отдельный коммит, защищён от отмены
+                print(f"[TIMER] Finishing room {room_id}")
+                await db.execute(
+                    update(Room)
+                    .where(Room.id == room_id)
+                    .values(
+                        status=RoomStatus.finished,
+                        finished_at=datetime.now(),
+                    )
+                )
+                await db.commit()
+                print(f"[TIMER] Room {room_id} marked as finished in DB ✓")
+
+                result = await db.execute(select(Room).where(Room.id == room_id))
+                fresh_room_for_lb = result.scalar_one()
+                leaderboard = await get_leaderboard(db, fresh_room_for_lb)
+
+        # broadcast вне async with — DB уже закрыта, статус записан
+        if not next_question:
+            print(f"[TIMER] Broadcasting quiz_finish for room {room_id}")
             await room_manager.broadcast(
                 join_code,
                 {"event": "quiz_finish", "leaderboard": leaderboard}
             )
+            print(f"[TIMER] quiz_finish broadcasted for room {room_id} ✓")
             return
 
-        quiz = await get_quiz(db, quiz_id)
-        total_result = await db.execute(
-            select(Question).where(Question.quiz_id == quiz_id)
-        )
-        total = len(total_result.scalars().all())
+        # Следующий вопрос
+        async with AsyncSessionLocal() as db:
+            quiz = await get_quiz(db, quiz_id)
+            total_result = await db.execute(
+                select(Question).where(Question.quiz_id == quiz_id)
+            )
+            total = len(total_result.scalars().all())
 
-        payload = await question_payload(
-            db, next_question,
-            new_index,
-            total, quiz.time_per_question,
-        )
+            payload = await question_payload(db, next_question, new_index, total, quiz.time_per_question)
+
+            result = await db.execute(select(Room).where(Room.id == room_id))
+            fresh_room_for_next = result.scalar_one()
+
+        print(f"[TIMER] Broadcasting next question (index {new_index}) for room {room_id}")
         await room_manager.broadcast(join_code, payload)
 
-        result = await db.execute(select(Room).where(Room.id == room_id))
-        fresh_room_for_next = result.scalar_one()
-
+        # Запускаем новый таймер — НЕ отменяем текущий (мы и есть текущий)
         state = room_manager._get_state(join_code)
-        if state.question_timer_task:
-            state.question_timer_task.cancel()
+        print(f"[TIMER] Scheduling next timer for room {room_id}, index {new_index}")
         state.question_timer_task = asyncio.create_task(
             schedule_question_end(fresh_room_for_next, next_question, quiz.time_per_question)
         )
+        print(f"[TIMER] Next timer scheduled for room {room_id} ✓")
+
+    except asyncio.CancelledError:
+        print(f"[TIMER] CancelledError caught during DB finalization for room {room_id} — ignoring")
+    except Exception as e:
+        print(f"[TIMER] ERROR during question advance for room {room_id}: {e}")

@@ -64,8 +64,13 @@ class ParticipationHistoryResponse(BaseModel):
     room_id: uuid.UUID
     quiz_title: str
     score: int
+    total_points: int
     finished_at: datetime | None
     leaderboard_position: int | None
+    total_participants: int
+    questions_count: int
+    time_per_question: int
+    category: str | None 
 
 
 class ImageUploadResponse(BaseModel):

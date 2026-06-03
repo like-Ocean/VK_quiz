@@ -1,10 +1,12 @@
 import uuid
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 from core.security import hash_password, verify_password
+from models.question import Question
 from models.quiz import Quiz
-from models.room import Room
+from models.room import Room, RoomStatus
+from models.category import Category
 from models.room_participant import RoomParticipant
 from models.user import User
 
@@ -85,41 +87,111 @@ async def update_user_password(db: AsyncSession, user: User, new_password: str) 
 	return user
 
 
-async def list_user_quizzes(db: AsyncSession, user: User) -> list[Quiz]:
-	result = await db.execute(select(Quiz).where(Quiz.owner_id == user.id))
-	return list(result.scalars().all())
+async def list_user_quizzes(db: AsyncSession, user: User) -> list[dict]:
+    result = await db.execute(select(Quiz).where(Quiz.owner_id == user.id))
+    quizzes = list(result.scalars().all())
+    items: list[dict] = []
+    for quiz in quizzes:
+        count_result = await db.execute(
+            select(func.count(Question.id)).where(Question.quiz_id == quiz.id)
+        )
+        questions_count = count_result.scalar_one() or 0
+        room_result = await db.execute(
+            select(Room).where(
+                Room.quiz_id == quiz.id,
+                Room.status != RoomStatus.finished,
+            )
+        )
+        room = room_result.scalar_one_or_none()
+
+        participants_count: int | None = None
+        room_status: RoomStatus | None = None
+
+        if room:
+            room_status = room.status
+            p_result = await db.execute(
+                select(func.count(RoomParticipant.id))
+                .where(RoomParticipant.room_id == room.id)
+            )
+            participants_count = p_result.scalar_one() or 0
+
+        category_name = None
+        if quiz.category_id:
+            cat_result = await db.execute(
+                select(Category).where(Category.id == quiz.category_id)
+            )
+            cat = cat_result.scalar_one_or_none()
+            category_name = cat.name if cat else None
+
+        items.append({
+            "id": quiz.id,
+            "owner_id": quiz.owner_id,
+            "category_id": quiz.category_id,
+            "category_name": category_name,
+            "title": quiz.title,
+            "description": quiz.description,
+            "time_per_question": quiz.time_per_question,
+            "is_public": quiz.is_public,
+            "created_at": quiz.created_at,
+            "updated_at": quiz.updated_at,
+            "questions_count": questions_count,
+            "participants_count": participants_count,
+            "room_status": room_status,
+        })
+
+    return items
 
 
 async def get_participation_history(db: AsyncSession, user: User) -> list[dict]:
-	result = await db.execute(
-		select(RoomParticipant, Room, Quiz)
-		.join(Room, RoomParticipant.room_id == Room.id)
-		.join(Quiz, Room.quiz_id == Quiz.id)
-		.where(RoomParticipant.user_id == user.id)
-	)
-	rows = result.all()
+    result = await db.execute(
+        select(RoomParticipant, Room, Quiz)
+        .join(Room, RoomParticipant.room_id == Room.id)
+        .join(Quiz, Room.quiz_id == Quiz.id)
+        .where(RoomParticipant.user_id == user.id)
+    )
+    rows = result.all()
 
-	history: list[dict] = []
-	for participant, room, quiz in rows:
-		participants_result = await db.execute(
-			select(RoomParticipant)
-			.where(RoomParticipant.room_id == room.id)
-			.order_by(RoomParticipant.score.desc())
-		)
-		participants = list(participants_result.scalars().all())
-		position = next(
-			(idx + 1 for idx, item in enumerate(participants) if item.id == participant.id),
-			None,
-		)
+    history: list[dict] = []
+    for participant, room, quiz in rows:
+        participants_result = await db.execute(
+            select(RoomParticipant)
+            .where(RoomParticipant.room_id == room.id)
+            .order_by(RoomParticipant.score.desc())
+        )
+        participants = list(participants_result.scalars().all())
+        position = next(
+            (idx + 1 for idx, item in enumerate(participants) if item.id == participant.id),
+            None,
+        )
 
-		history.append(
-			{
-				"room_id": room.id,
-				"quiz_title": quiz.title,
-				"score": participant.score,
-				"finished_at": room.finished_at,
-				"leaderboard_position": position,
-			}
-		)
+        total_result = await db.execute(
+            select(func.sum(Question.points)).where(Question.quiz_id == quiz.id)
+        )
+        total_points = total_result.scalar_one() or 0
+        count_result = await db.execute(
+            select(func.count(Question.id)).where(Question.quiz_id == quiz.id)
+        )
+        questions_count = count_result.scalar_one() or 0
 
-	return history
+        category_name = None
+        if quiz.category_id:
+            cat_result = await db.execute(
+                select(Category).where(Category.id == quiz.category_id)
+            )
+            cat = cat_result.scalar_one_or_none()
+            category_name = cat.name if cat else None
+
+        history.append({
+            "room_id": room.id,
+            "quiz_title": quiz.title,
+            "score": participant.score,
+            "total_points": total_points,
+            "finished_at": room.finished_at,
+            "leaderboard_position": position,
+            "total_participants": len(participants),
+            "questions_count": questions_count,
+            "time_per_question": quiz.time_per_question,
+            "category": category_name,
+        })
+
+    return history

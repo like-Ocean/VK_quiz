@@ -27,9 +27,9 @@ class RoomManager:
     async def disconnect(self, room_code: str, participant_id: str) -> None:
         state = self._get_state(room_code)
         state.connections.pop(participant_id, None)
-        if not state.connections and state.question_timer_task:
-            state.question_timer_task.cancel()
-            state.question_timer_task = None
+        # if not state.connections and state.question_timer_task:
+        #     state.question_timer_task.cancel()
+        #     state.question_timer_task = None
 
     async def broadcast(self, room_code: str, message: dict) -> None:
         state = self._get_state(room_code)

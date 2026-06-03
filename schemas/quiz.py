@@ -2,6 +2,8 @@ from datetime import datetime
 import uuid
 from pydantic import BaseModel, Field
 
+from models.room import RoomStatus
+
 
 class QuizCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
@@ -30,6 +32,9 @@ class QuizResponse(BaseModel):
     is_public: bool
     created_at: datetime
     updated_at: datetime
+    questions_count: int | None = None
+    participants_count: int | None = None
+    room_status: RoomStatus | None = None
 
     class Config:
         from_attributes = True

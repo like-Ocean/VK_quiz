@@ -79,14 +79,6 @@ async def change_user_password(db: AsyncSession, user: User, old_password: str, 
 	await db.commit()
 
 
-async def update_user_password(db: AsyncSession, user: User, new_password: str) -> User:
-	user.password = hash_password(new_password)
-	await db.commit()
-	await db.refresh(user)
-	
-	return user
-
-
 async def list_user_quizzes(db: AsyncSession, user: User) -> list[dict]:
     result = await db.execute(select(Quiz).where(Quiz.owner_id == user.id))
     quizzes = list(result.scalars().all())

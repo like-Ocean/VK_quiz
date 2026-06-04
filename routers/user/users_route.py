@@ -8,7 +8,8 @@ from schemas.auth import MessageResponse
 from schemas.quiz import QuizResponse
 from schemas.room import ParticipationHistoryResponse
 from services.user_service import (
-    update_user_profile, change_user_password, list_user_quizzes, get_participation_history
+    update_user_profile, change_user_password,
+    list_user_quizzes, get_participation_history
 )
 
 user_router = APIRouter(prefix="/users", tags=["users"])

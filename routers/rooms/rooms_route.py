@@ -13,10 +13,15 @@ from schemas.room import (
 from services.room_service import (
     create_room, get_room_by_join_code, join_room,
     list_participants, kick_participant,
-    get_room_results, get_room
+    get_room_results, get_room, get_kick_reasons
 )
 
 room_router = APIRouter(prefix="/rooms", tags=["rooms"])
+
+
+@room_router.get("/kick-reasons")
+async def kick_reasons_handler(db: AsyncSession = Depends(get_db)):
+    return await get_kick_reasons(db)
 
 
 @room_router.post("", response_model=RoomResponse, status_code=status.HTTP_201_CREATED)

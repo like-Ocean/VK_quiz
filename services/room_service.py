@@ -146,6 +146,7 @@ async def kick_participant(
             comment=comment
         )
     )
+    await db.delete(participant)
     await db.commit()
 
     await room_manager.kick_participant(room.join_code, str(participant.id), reason_label)
@@ -232,3 +233,8 @@ async def save_answer(
     participant.score += score
     await db.commit()
     return is_correct, score
+
+
+async def get_kick_reasons(db: AsyncSession) -> list[KickReason]:
+    result = await db.execute(select(KickReason))
+    return result.scalars().all()

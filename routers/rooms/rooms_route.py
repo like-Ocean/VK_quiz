@@ -77,16 +77,5 @@ async def kick_participant_handler(
 
 
 @room_router.get("/{room_id}/results", response_model=list[LeaderboardEntry])
-async def get_results(
-    room_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-) -> list[LeaderboardEntry]:
-    participants = await get_room_results(db, room_id)
-    return [
-        LeaderboardEntry(
-            participant_id=item.id,
-            display_name=item.display_name,
-            score=item.score,
-        )
-        for item in participants
-    ]
+async def get_results(room_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> list[LeaderboardEntry]:
+    return await get_room_results(db, room_id)

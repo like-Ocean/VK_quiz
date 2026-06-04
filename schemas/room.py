@@ -58,6 +58,9 @@ class LeaderboardEntry(BaseModel):
     participant_id: uuid.UUID
     display_name: str
     score: int
+    total: int
+    correct: int
+    questions: int
 
 
 class ParticipationHistoryResponse(BaseModel):

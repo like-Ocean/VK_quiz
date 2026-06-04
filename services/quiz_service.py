@@ -50,7 +50,7 @@ async def list_public_quizzes(
                 Room.status != RoomStatus.finished,
             )
         )
-        room = room_result.scalar_one_or_none()
+        room = room_result.scalars().first()
 
         participants_count: int | None = None
         room_status: RoomStatus | None = None
@@ -78,6 +78,7 @@ async def list_public_quizzes(
                 "questions_count": questions_count,
                 "participants_count": participants_count,
                 "room_status": room_status,
+                "active_room_id": room.id if room else None,
             }
         )
 

@@ -2,7 +2,7 @@ import random
 import string
 import uuid
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from core.security import create_access_token
@@ -151,12 +151,46 @@ async def kick_participant(
     await room_manager.kick_participant(room.join_code, str(participant.id), reason_label)
 
 
-async def get_room_results(db: AsyncSession, room_id: uuid.UUID) -> list[RoomParticipant]:
-    await _get_room(db, room_id)
-    result = await db.execute(
-        select(RoomParticipant).where(RoomParticipant.room_id == room_id).order_by(RoomParticipant.score.desc())
+async def get_room_results(db: AsyncSession, room_id: uuid.UUID) -> list[dict]:
+    room = await _get_room(db, room_id)
+    quiz_result = await db.execute(select(Quiz).where(Quiz.id == room.quiz_id))
+    quiz = quiz_result.scalar_one()
+    q_count_result = await db.execute(
+        select(func.count(Question.id)).where(Question.quiz_id == quiz.id)
     )
-    return list(result.scalars().all())
+    questions_count = q_count_result.scalar_one() or 0
+    total_points_result = await db.execute(
+        select(func.sum(Question.points)).where(Question.quiz_id == quiz.id)
+    )
+    total_points = total_points_result.scalar_one() or 0
+    participants_result = await db.execute(
+        select(RoomParticipant)
+        .where(RoomParticipant.room_id == room_id)
+        .order_by(RoomParticipant.score.desc())
+    )
+    participants = list(participants_result.scalars().all())
+    items: list[dict] = []
+    for p in participants:
+        correct_result = await db.execute(
+            select(func.count(ParticipantAnswer.id)).where(
+                ParticipantAnswer.room_id == room_id,
+                ParticipantAnswer.participant_id == p.id,
+                ParticipantAnswer.is_correct == True,
+            )
+        )
+        correct = correct_result.scalar_one() or 0
+        items.append(
+            {
+                "participant_id": p.id,
+                "display_name": p.display_name,
+                "score": p.score,
+                "total": total_points,
+                "correct": correct,
+                "questions": questions_count
+            }
+        )
+
+    return items
 
 
 async def get_room_by_join_code(db: AsyncSession, join_code: str) -> Room | None:

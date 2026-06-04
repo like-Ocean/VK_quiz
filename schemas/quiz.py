@@ -35,6 +35,7 @@ class QuizResponse(BaseModel):
     questions_count: int | None = None
     participants_count: int | None = None
     room_status: RoomStatus | None = None
+    active_room_id: uuid.UUID | None = None
 
     class Config:
         from_attributes = True

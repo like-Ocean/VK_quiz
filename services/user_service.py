@@ -102,7 +102,7 @@ async def list_user_quizzes(db: AsyncSession, user: User) -> list[dict]:
                 Room.status != RoomStatus.finished,
             )
         )
-        room = room_result.scalar_one_or_none()
+        room = room = room_result.scalars().first()
 
         participants_count: int | None = None
         room_status: RoomStatus | None = None
@@ -137,6 +137,7 @@ async def list_user_quizzes(db: AsyncSession, user: User) -> list[dict]:
             "questions_count": questions_count,
             "participants_count": participants_count,
             "room_status": room_status,
+			"active_room_id": room.id if room else None,
         })
 
     return items

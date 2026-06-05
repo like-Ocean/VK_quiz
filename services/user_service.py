@@ -88,24 +88,25 @@ async def list_user_quizzes(db: AsyncSession, user: User) -> list[dict]:
             select(func.count(Question.id)).where(Question.quiz_id == quiz.id)
         )
         questions_count = count_result.scalar_one() or 0
-        room_result = await db.execute(
-            select(Room).where(
-                Room.quiz_id == quiz.id,
-                Room.status != RoomStatus.finished,
-            )
+        rooms_result = await db.execute(
+            select(Room).where(Room.quiz_id == quiz.id)
         )
-        room = room = room_result.scalars().first()
+        rooms = list(rooms_result.scalars().all())
+        active_room = next(
+            (r for r in rooms if r.status != RoomStatus.finished), None
+        )
 
-        participants_count: int | None = None
-        room_status: RoomStatus | None = None
-
-        if room:
-            room_status = room.status
+        room_status = active_room.status if active_room else None
+        active_room_id = active_room.id if active_room else None
+        max_participants = 0
+        for room in rooms:
             p_result = await db.execute(
                 select(func.count(RoomParticipant.id))
                 .where(RoomParticipant.room_id == room.id)
             )
-            participants_count = p_result.scalar_one() or 0
+            count = p_result.scalar_one() or 0
+            if count > max_participants:
+                max_participants = count
 
         category_name = None
         if quiz.category_id:
@@ -127,9 +128,9 @@ async def list_user_quizzes(db: AsyncSession, user: User) -> list[dict]:
             "created_at": quiz.created_at,
             "updated_at": quiz.updated_at,
             "questions_count": questions_count,
-            "participants_count": participants_count,
+            "participants_count": max_participants,
             "room_status": room_status,
-			"active_room_id": room.id if room else None,
+            "active_room_id": active_room_id,
         })
 
     return items
